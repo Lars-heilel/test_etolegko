@@ -32,3 +32,14 @@ Implemented against base `43e3d14`.
 - `git diff --check` — passed.
 
 No unresolved implementation blockers. Package installation reported peer-dependency warnings; frontend checks and build succeeded.
+
+## Review follow-up: assigned-country contract and generator paths
+
+- Replaced the brief's unfiltered country mapping with `world-countries`' `officially-assigned` status filter. All 249 backend-accepted ISO codes, including territories, remain; user-assigned `XK` is excluded.
+- Added a cross-language contract test that sends every offered code to the actual Python `CountryCode` validator and compares the complete offered set with the backend's accepted set. It does not copy the backend allowlist or repeat the frontend metadata filter. The test uses local `python3` and only Python standard-library code; no API service or Python third-party dependencies are needed.
+- RED: the contract test failed with rejected code `["XK"]` before the filter. GREEN: all 15 tests across 3 files pass.
+- Added the existing `@/* -> ./src/*` mapping to root `tsconfig.json`, where shadcn discovers aliases. `shadcn info --json` now resolves UI to `src/shared/ui` and recognizes installed components. `shadcn add select --dry-run` targets `src/shared/ui/select.tsx`, not literal `@/shared/ui`; no component overwrite was performed.
+- Updated the generator's utils alias and all Task 9 UI helper imports to the `@/shared/lib` public API.
+- Exact peer warning from `pnpm peers check`: **`tsconfck@3.1.6` requires peer `typescript@^5.0.0`; installed `typescript@7.0.2`**. This is the only reported mismatch (the diagnostic exits 1). No dependency versions or lockfile were changed for this follow-up.
+- Initial typecheck identified missing Node type references in the new subprocess-based test; added a test-file Node type reference and reran the complete frontend checks.
+- Final checks: `pnpm test`, `pnpm typecheck`, `pnpm lint`, `pnpm fsd:lint`, and `pnpm build` all exit 0. Lint retains the same three documented Fast Refresh warnings. Production bundle size is unchanged. No live writes or agents used.
