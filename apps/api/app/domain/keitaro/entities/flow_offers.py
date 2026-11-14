@@ -91,6 +91,8 @@ class FlowOffers:
 
     def restore_offer(self, offer_id: OfferId) -> None:
         item = self._find(offer_id)
+        if item.is_active:
+            return
         active = [
             _ShareSnapshot(offer_id=offer_id, share=0, locked=False)
             if current.offer_id == offer_id

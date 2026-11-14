@@ -54,3 +54,11 @@ class FlowOffersResponse(BaseModel):
 class OfferRotationResponse(BaseModel):
     campaign_id: int
     flows: list[FlowOffersResponse]
+
+
+class AddOfferRequest(BaseModel):
+    offer_id: Annotated[int, Field(strict=True, gt=0)]
+
+
+class LockOfferRequest(BaseModel):
+    locked: Annotated[bool, Field(strict=True)]

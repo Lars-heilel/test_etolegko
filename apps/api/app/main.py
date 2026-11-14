@@ -6,6 +6,12 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.domain.keitaro.exceptions import (
+    DomainError,
+    FlowNotFoundError,
+    OfferAlreadyExistsError,
+    OfferNotFoundError,
+)
 from app.infrastructure.config import get_settings
 from app.infrastructure.database import dispose_engine
 from app.presentation.api.router import api_router
@@ -20,6 +26,17 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title=settings.app_name, lifespan=lifespan)
+
+    @app.exception_handler(DomainError)
+    async def domain_error(_: Request, error: DomainError) -> JSONResponse:
+        status_code = 422
+        if isinstance(error, (FlowNotFoundError, OfferNotFoundError)):
+            status_code = 404
+        elif isinstance(error, OfferAlreadyExistsError):
+            status_code = 409
+        return JSONResponse(
+            status_code=status_code, content={"code": error.code, "message": error.message}
+        )
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(_: Request, error: RequestValidationError) -> JSONResponse:

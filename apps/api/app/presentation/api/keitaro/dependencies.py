@@ -14,11 +14,15 @@ from app.infrastructure.keitaro.flows import KeitaroFlowGateway
 from app.infrastructure.persistence.campaign_offer_repository import (
     SqlAlchemyCampaignOfferRepository,
 )
+from app.usecase.keitaro.add_offer_usecase import AddOfferUseCase
 from app.usecase.keitaro.create_campaign_usecase import CreateCampaignUseCase
+from app.usecase.keitaro.delete_offer_usecase import DeleteOfferUseCase
 from app.usecase.keitaro.get_form_options_usecase import GetFormOptionsUseCase
 from app.usecase.keitaro.list_campaigns_usecase import ListCampaignsUseCase
 from app.usecase.keitaro.list_offers_usecase import ListOffersUseCase
 from app.usecase.keitaro.refresh_campaign_offers_usecase import RefreshCampaignOffersUseCase
+from app.usecase.keitaro.restore_offer_usecase import RestoreOfferUseCase
+from app.usecase.keitaro.set_offer_lock_usecase import SetOfferLockUseCase
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
@@ -82,3 +86,21 @@ def get_refresh_usecase(
     repository: OfferRepositoryDep, flows: FlowGatewayDep, catalog: CampaignGatewayDep
 ) -> RefreshCampaignOffersUseCase:
     return RefreshCampaignOffersUseCase(repository, flows, catalog)
+
+
+def get_add_offer_usecase(
+    repository: OfferRepositoryDep, catalog: CampaignGatewayDep
+) -> AddOfferUseCase:
+    return AddOfferUseCase(repository, catalog)
+
+
+def get_delete_offer_usecase(repository: OfferRepositoryDep) -> DeleteOfferUseCase:
+    return DeleteOfferUseCase(repository)
+
+
+def get_restore_offer_usecase(repository: OfferRepositoryDep) -> RestoreOfferUseCase:
+    return RestoreOfferUseCase(repository)
+
+
+def get_set_lock_usecase(repository: OfferRepositoryDep) -> SetOfferLockUseCase:
+    return SetOfferLockUseCase(repository)
