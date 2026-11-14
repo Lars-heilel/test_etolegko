@@ -9,9 +9,16 @@ from app.domain.keitaro.constants import (
 )
 from app.domain.keitaro.snapshots import KeitaroFlowSnapshot, KeitaroOfferSnapshot
 from app.infrastructure.keitaro.client import KeitaroClient
+from app.infrastructure.keitaro.errors import KeitaroResponseError
 
 # StreamRequestPut references StreamObject, which includes campaign_id.
 READ_ONLY_STREAM_FIELDS = {"id", "updated_at", "created_at"}
+
+
+def _validate_created_stream(payload: Any) -> None:
+    stream_id = payload.get("id") if isinstance(payload, dict) else None
+    if type(stream_id) is not int or stream_id <= 0:
+        raise KeitaroResponseError(200, "Keitaro returned an invalid stream response")
 
 
 class KeitaroFlowGateway:
@@ -40,7 +47,7 @@ class KeitaroFlowGateway:
         return flows
 
     async def create_google_flow(self, campaign_id: int, country_code: str) -> None:
-        await self._client.post(
+        created = await self._client.post(
             "/streams",
             json={
                 "campaign_id": campaign_id,
@@ -57,9 +64,10 @@ class KeitaroFlowGateway:
                 ],
             },
         )
+        _validate_created_stream(created)
 
     async def create_offer_flow(self, campaign_id: int, offer_id: int) -> None:
-        await self._client.post(
+        created = await self._client.post(
             "/streams",
             json={
                 "campaign_id": campaign_id,
@@ -74,6 +82,7 @@ class KeitaroFlowGateway:
                 "offers": [{"offer_id": offer_id, "share": 100, "state": "active"}],
             },
         )
+        _validate_created_stream(created)
 
     async def update_offers(self, stream_id: int, offers: list[tuple[int, int]]) -> None:
         stream: dict[str, Any] = await self._client.get(f"/streams/{stream_id}")

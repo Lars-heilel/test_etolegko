@@ -1,4 +1,7 @@
-class KeitaroError(Exception):
+from app.domain.keitaro.exceptions import GatewayError
+
+
+class KeitaroError(GatewayError):
     pass
 
 

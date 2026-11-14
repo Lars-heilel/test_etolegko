@@ -14,6 +14,7 @@ from app.infrastructure.keitaro.flows import KeitaroFlowGateway
 from app.infrastructure.persistence.campaign_offer_repository import (
     SqlAlchemyCampaignOfferRepository,
 )
+from app.usecase.keitaro.create_campaign_usecase import CreateCampaignUseCase
 from app.usecase.keitaro.get_form_options_usecase import GetFormOptionsUseCase
 from app.usecase.keitaro.list_campaigns_usecase import ListCampaignsUseCase
 from app.usecase.keitaro.list_offers_usecase import ListOffersUseCase
@@ -61,6 +62,12 @@ OfferRepositoryDep = Annotated[
 
 def get_list_campaigns_usecase(gateway: CampaignGatewayDep) -> ListCampaignsUseCase:
     return ListCampaignsUseCase(gateway)
+
+
+def get_create_campaign_usecase(
+    campaigns: CampaignGatewayDep, flows: FlowGatewayDep
+) -> CreateCampaignUseCase:
+    return CreateCampaignUseCase(campaigns, flows)
 
 
 def get_list_offers_usecase(gateway: CampaignGatewayDep) -> ListOffersUseCase:

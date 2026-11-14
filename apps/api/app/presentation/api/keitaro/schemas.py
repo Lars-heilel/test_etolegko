@@ -1,4 +1,22 @@
-from pydantic import BaseModel
+from typing import Annotated
+
+from pydantic import BaseModel, Field, StringConstraints, field_validator
+
+from app.domain.keitaro.value_objects.country import CountryCode
+
+
+class CreateCampaignRequest(BaseModel):
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+    country_code: str
+    offer_id: Annotated[int, Field(strict=True, gt=0)]
+    domain_id: Annotated[int, Field(strict=True, gt=0)]
+    group_id: Annotated[int, Field(strict=True, gt=0)]
+    traffic_source_id: Annotated[int, Field(strict=True, gt=0)]
+
+    @field_validator("country_code")
+    @classmethod
+    def validate_country(cls, value: str) -> str:
+        return CountryCode(value).value
 
 
 class CampaignSummaryResponse(BaseModel):
