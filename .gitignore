@@ -21,6 +21,7 @@ dist/
 !.env.example
 
 # --- tooling ---
+.worktrees/
 .DS_Store
 .idea/
 .vscode/
