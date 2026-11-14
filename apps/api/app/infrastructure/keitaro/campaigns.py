@@ -2,6 +2,7 @@ from typing import Any, cast
 
 from app.domain.keitaro.snapshots import CampaignSummary, CatalogItem
 from app.infrastructure.keitaro.client import KeitaroClient
+from app.infrastructure.keitaro.errors import KeitaroResponseError
 
 PAGE_SIZE = 100
 
@@ -57,6 +58,18 @@ class KeitaroCampaignGateway:
             CatalogItem(id=item["id"], name=item["name"])
             for item in await self._client.get("/offers")
         ]
+
+    async def create_traffic_source(self, name: str) -> CatalogItem:
+        item = await self._client.post("/traffic_sources", json={"name": name})
+        if (
+            not isinstance(item, dict)
+            or type(item.get("id")) is not int
+            or item["id"] <= 0
+            or not isinstance(item.get("name"), str)
+            or not item["name"].strip()
+        ):
+            raise KeitaroResponseError(200, "Invalid traffic source response")
+        return CatalogItem(id=item["id"], name=item["name"])
 
     async def get_offer(self, offer_id: int) -> CatalogItem:
         item = await self._client.get(f"/offers/{offer_id}")

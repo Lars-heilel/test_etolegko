@@ -58,6 +58,21 @@ class CampaignCreationError(DomainError):
         super().__init__(message)
 
 
+class TrafficSourceCreationError(DomainError):
+    code = "KEITARO_UNAVAILABLE"
+
+    def __init__(self, error: GatewayError) -> None:
+        self.upstream_status = error.upstream_status
+        self.upstream_category = error.upstream_category
+        message = (
+            "Выданный API-ключ не имеет прав на создание источника в Keitaro."
+            if error.upstream_status == 403
+            else "Создание источника не подтверждено. Обновите каталоги и проверьте "
+            "источники в Keitaro перед повторной попыткой."
+        )
+        super().__init__(message)
+
+
 class CampaignNotFoundError(DomainError):
     code = "CAMPAIGN_NOT_FOUND"
 

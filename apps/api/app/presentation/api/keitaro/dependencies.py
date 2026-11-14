@@ -15,6 +15,7 @@ from app.infrastructure.persistence.campaign_offer_repository import (
 )
 from app.usecase.keitaro.add_offer_usecase import AddOfferUseCase
 from app.usecase.keitaro.create_campaign_usecase import CreateCampaignUseCase
+from app.usecase.keitaro.create_traffic_source_usecase import CreateTrafficSourceUseCase
 from app.usecase.keitaro.delete_offer_usecase import DeleteOfferUseCase
 from app.usecase.keitaro.get_form_options_usecase import GetFormOptionsUseCase
 from app.usecase.keitaro.list_campaigns_usecase import ListCampaignsUseCase
@@ -69,6 +70,10 @@ def get_create_campaign_usecase(
 
 def get_list_offers_usecase(gateway: CampaignGatewayDep) -> ListOffersUseCase:
     return ListOffersUseCase(gateway)
+
+
+def get_create_traffic_source_usecase(gateway: CampaignGatewayDep) -> CreateTrafficSourceUseCase:
+    return CreateTrafficSourceUseCase(gateway)
 
 
 def get_form_options_usecase(gateway: CampaignGatewayDep) -> GetFormOptionsUseCase:

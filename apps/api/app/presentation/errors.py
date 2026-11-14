@@ -12,6 +12,7 @@ from app.domain.keitaro.exceptions import (
     FlowNotFoundError,
     OfferAlreadyExistsError,
     OfferNotFoundError,
+    TrafficSourceCreationError,
 )
 from app.infrastructure.keitaro.errors import KeitaroError, KeitaroUnavailableError
 
@@ -52,6 +53,12 @@ def install_error_handlers(app: FastAPI) -> None:
             content.update(
                 failed_stream_id=error.failed_stream_id,
                 confirmed_stream_ids=error.confirmed_stream_ids,
+            )
+        elif isinstance(error, TrafficSourceCreationError):
+            status_code = 502
+            content.update(
+                upstream_status=error.upstream_status,
+                upstream_category=error.upstream_category,
             )
         return JSONResponse(status_code=status_code, content=content)
 

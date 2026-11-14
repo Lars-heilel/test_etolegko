@@ -1,12 +1,12 @@
 import { useRef, useState } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { useMutation } from "@tanstack/react-query"
-import { useForm } from "react-hook-form"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useForm, useWatch } from "react-hook-form"
 import { Link, useNavigate } from "react-router-dom"
 import { ArrowLeftIcon } from "lucide-react"
 import { toast } from "sonner"
 
-import { campaignsApi } from "@/shared/api"
+import { campaignsApi, type FormOptions } from "@/shared/api"
 import { countryOptions } from "@/shared/config"
 import { getApiErrorMessage } from "@/shared/lib/get-api-error-message"
 import { Alert, AlertDescription, AlertTitle, Button, Card, CardContent, CardHeader, CardTitle, Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, Input, Label } from "@/shared/ui"
@@ -16,14 +16,20 @@ import { campaignCreateCatalogSchema, type CampaignCreateValues } from "../model
 
 export function CampaignCreatePage() {
   const navigate = useNavigate()
-  const { offers } = useCampaignForm()
+  const queryClient = useQueryClient()
+  const { offers, formOptions } = useCampaignForm()
+  const catalogs = formOptions.data ?? { domains: [], groups: [], traffic_sources: [] }
   const [offerSearch, setOfferSearch] = useState("")
   const [offerOpen, setOfferOpen] = useState(false)
+  const [sourceOpen, setSourceOpen] = useState(false)
+  const [sourceName, setSourceName] = useState("")
+  const sourceSubmitting = useRef(false)
   const submitting = useRef(false)
   const form = useForm<CampaignCreateValues>({
-    resolver: zodResolver(campaignCreateCatalogSchema(offers.data ?? [])),
-    defaultValues: { name: "", country_code: "", offer_id: 0 },
+    resolver: zodResolver(campaignCreateCatalogSchema(offers.data ?? [], catalogs)),
+    defaultValues: { name: "", country_code: "", offer_id: 0, group_id: 0 },
   })
+  const selectedSource = useWatch({ control: form.control, name: "traffic_source_id" })
   const mutation = useMutation({
     mutationFn: (values: CampaignCreateValues) => campaignsApi.create(values),
     retry: false,
@@ -32,9 +38,45 @@ export function CampaignCreatePage() {
       navigate(`/campaigns/${campaign.id}/edit`)
     },
   })
-  const loaded = offers.isSuccess
-  const blocked = !loaded || offers.data.length === 0
-  const pending = mutation.isPending || form.formState.isSubmitting
+  const sourceMutation = useMutation({
+    mutationFn: campaignsApi.createTrafficSource,
+    retry: false,
+    onSuccess: async (source) => {
+      await queryClient.cancelQueries({ queryKey: ["campaign-form-options"] })
+      queryClient.setQueryData<FormOptions>(["campaign-form-options"], (current) => current ? {
+        ...current,
+        traffic_sources: [...current.traffic_sources.filter((item) => item.id !== source.id), source],
+      } : undefined)
+      form.setValue("traffic_source_id", source.id, { shouldDirty: true })
+      form.clearErrors("traffic_source_id")
+      setSourceOpen(false)
+      setSourceName("")
+      toast.success("Источник создан и выбран")
+    },
+  })
+  const loaded = offers.isSuccess && formOptions.isSuccess
+  const missing = [
+    !offers.data?.length && "офферы",
+    !catalogs.groups.length && "группы",
+  ].filter(Boolean)
+  const blocked = !loaded || missing.length > 0
+  const catalogError = offers.error ?? formOptions.error
+  const refreshing = offers.isFetching || formOptions.isFetching
+  const refreshCatalogs = () => { void offers.refetch(); void formOptions.refetch() }
+  const campaignPending = mutation.isPending || form.formState.isSubmitting
+  const pending = campaignPending || sourceMutation.isPending
+  const createSource = async () => {
+    const name = sourceName.trim()
+    if (!name || pending || sourceSubmitting.current || !loaded || refreshing) return
+    sourceSubmitting.current = true
+    try {
+      await sourceMutation.mutateAsync(name)
+    } catch {
+      // Keep the name and upstream outcome visible; POST is never automatically retried.
+    } finally {
+      sourceSubmitting.current = false
+    }
+  }
   const error = (name: keyof CampaignCreateValues) => form.formState.errors[name]
   const validation = (name: keyof CampaignCreateValues) => error(name) ? (
     <p id={`${name}-error`} className="text-sm text-destructive">{error(name)?.message}</p>
@@ -52,7 +94,7 @@ export function CampaignCreatePage() {
         </Button>
         <h1 className="text-2xl font-semibold tracking-tight">Новая кампания</h1>
         <p className="text-sm text-muted-foreground">
-          Название, гео и оффер.
+           Название, гео, оффер и группа. Домен и источник — необязательно.
         </p>
       </div>
 
@@ -62,7 +104,7 @@ export function CampaignCreatePage() {
         </CardHeader>
         <CardContent>
           <form className="flex flex-col gap-4" noValidate onSubmit={(event) => { void form.handleSubmit(async (values) => {
-            if (blocked || submitting.current) return
+             if (blocked || submitting.current || sourceSubmitting.current) return
             submitting.current = true
             try {
               await mutation.mutateAsync(values)
@@ -72,17 +114,17 @@ export function CampaignCreatePage() {
               submitting.current = false
             }
           })(event) }}>
-            {!loaded && !offers.isError && <p role="status">Загрузка каталогов…</p>}
-            {offers.isError && <Alert variant="destructive">
+            {!loaded && !catalogError && <p role="status">Загрузка каталогов…</p>}
+            {catalogError && <Alert variant="destructive">
               <AlertTitle>Не удалось загрузить каталоги</AlertTitle>
-              <AlertDescription>{getApiErrorMessage(offers.error)}</AlertDescription>
-              <Button type="button" variant="outline" onClick={() => { void offers.refetch() }}>Повторить загрузку</Button>
+              <AlertDescription>{getApiErrorMessage(catalogError)}</AlertDescription>
+              <Button type="button" variant="outline" disabled={refreshing || pending} onClick={refreshCatalogs}>Повторить загрузку</Button>
             </Alert>}
             {loaded && blocked && <Alert>
-              <AlertTitle>Нет офферов в каталоге Keitaro</AlertTitle>
-              <AlertDescription>Добавьте записи в Keitaro и обновите каталоги. Для создания нужен существующий ID из каталога.</AlertDescription>
+              <AlertTitle>Нет доступных: {missing.join(", ")}</AlertTitle>
+              <AlertDescription>Источник можно создать ниже в этой форме. Недостающие группы и офферы добавьте в Keitaro, затем обновите каталоги.</AlertDescription>
             </Alert>}
-            {loaded && blocked && <Button type="button" variant="outline" onClick={() => { void offers.refetch() }}>Обновить каталоги</Button>}
+            {loaded && <Button type="button" variant="outline" disabled={refreshing || pending} onClick={refreshCatalogs}>Обновить каталоги</Button>}
             <fieldset disabled={pending} className="flex flex-col gap-4">
               <div className="flex flex-col gap-2">
                 <Label htmlFor="name">Название кампании</Label>
@@ -100,7 +142,7 @@ export function CampaignCreatePage() {
               <div className="flex flex-col gap-2">
                 <Label htmlFor="offer_id">Оффер</Label>
                 <Command label="Оффер" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setOfferOpen(false) }}>
-                  <CommandInput id="offer_id" aria-label="Оффер" placeholder="Поиск оффера" disabled={blocked || pending} aria-required aria-expanded={offerOpen} aria-invalid={!!error("offer_id")} aria-describedby="offer_id-error" value={offerSearch} onFocus={() => setOfferOpen(true)} onValueChange={(value) => {
+                  <CommandInput id="offer_id" aria-label="Оффер" placeholder="Поиск оффера" disabled={!offers.isSuccess || pending} aria-required aria-expanded={offerOpen} aria-invalid={!!error("offer_id")} aria-describedby="offer_id-error" value={offerSearch} onFocus={() => setOfferOpen(true)} onValueChange={(value) => {
                     setOfferSearch(value)
                     setOfferOpen(true)
                     form.setValue("offer_id", 0)
@@ -118,12 +160,54 @@ export function CampaignCreatePage() {
                 </Command>
                 {validation("offer_id")}
               </div>
+              {([
+                ["group_id", "Группа", catalogs.groups],
+                ["traffic_source_id", "Источник (необязательно)", catalogs.traffic_sources],
+                ["domain_id", "Домен (необязательно)", catalogs.domains],
+              ] as const).map(([field, label, items]) => (
+                <div key={field} className="flex flex-col gap-2">
+                  <Label htmlFor={field}>{label}</Label>
+                  <select id={field} className={selectClass} value={field === "traffic_source_id" ? selectedSource || "" : undefined} disabled={!loaded} aria-required={field === "group_id"} aria-invalid={!!error(field)} aria-describedby={`${field}-error`} {...form.register(field, { setValueAs: (value: string) => value === "" ? (field === "group_id" ? 0 : undefined) : Number(value) })}>
+                    <option value="">{field === "domain_id" ? "Без домена" : field === "traffic_source_id" ? "Без источника" : "Выберите"}</option>
+                    {items.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                  </select>
+                  {validation(field)}
+                  {field === "traffic_source_id" && <>
+                    <Alert>
+                      <AlertTitle>Почему источник необязателен?</AlertTitle>
+                      <AlertDescription>В выданном трекере создание источника недоступно из-за ограничения прав API-ключа (HTTP 403). Поэтому временно можно создать кампанию без источника. Если источник уже есть, выберите его; для создания нового администратор должен предоставить права. Исходное требование о настроенном источнике будет выполнено после его подключения.</AlertDescription>
+                    </Alert>
+                    {!sourceOpen ? <Button type="button" variant="outline" disabled={!loaded || refreshing} onClick={() => { sourceMutation.reset(); setSourceOpen(true) }}>Создать источник</Button> : <div className="flex flex-col gap-2 rounded-md border p-3">
+                      <Label htmlFor="source_name">Название источника</Label>
+                      <Input id="source_name" value={sourceName} onChange={(event) => setSourceName(event.target.value)} onKeyDown={(event) => {
+                        if (event.key === "Enter") { event.preventDefault(); void createSource() }
+                      }} />
+                      <p className="text-sm text-muted-foreground">Источник будет создан в Keitaro и выбран для этой кампании.</p>
+                      <div className="flex gap-2">
+                        <Button type="button" disabled={!sourceName.trim() || !loaded || refreshing || pending} onClick={() => { void createSource() }}>{sourceMutation.isPending ? "Создание источника…" : "Сохранить источник"}</Button>
+                        <Button type="button" variant="ghost" disabled={pending} onClick={() => { setSourceOpen(false); sourceMutation.reset() }}>Отмена</Button>
+                      </div>
+                    </div>}
+                    {sourceMutation.error && <Alert variant="destructive">
+                      <AlertTitle>Не удалось подтвердить создание источника</AlertTitle>
+                      <AlertDescription>{getApiErrorMessage(sourceMutation.error)}</AlertDescription>
+                    </Alert>}
+                  </>}
+                </div>
+              ))}
+              <Alert>
+                <AlertTitle>Почему домен необязателен?</AlertTitle>
+                <AlertDescription>
+                  При проверке выданного трекера 14.11.2026 список доменов был пуст, а создание домена с выданным API-ключом вернуло HTTP 403 — недостаточно прав. Поэтому временно разрешено создание кампании без домена. Для выполнения исходного требования администратор должен предоставить подключённый домен; после этого его можно выбрать из списка.
+                </AlertDescription>
+              </Alert>
+              {loaded && catalogs.domains.length === 0 && <p className="text-sm text-muted-foreground">Нет доступных доменов в Keitaro. Кампанию можно создать без домена.</p>}
             </fieldset>
             {mutation.error && <Alert variant="destructive">
               <AlertTitle>Создание не завершено</AlertTitle>
               <AlertDescription>{getApiErrorMessage(mutation.error)}</AlertDescription>
             </Alert>}
-            <Button disabled={blocked || pending} type="submit">{pending ? "Создание…" : "Создать"}</Button>
+            <Button disabled={blocked || pending} type="submit">{campaignPending ? "Создание…" : "Создать"}</Button>
           </form>
         </CardContent>
       </Card>

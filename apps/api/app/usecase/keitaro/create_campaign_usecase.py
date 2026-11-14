@@ -27,9 +27,9 @@ class CreateCampaignUseCase:
         name: str,
         country_code: str,
         offer_id: int,
-        domain_id: int | None = None,
-        group_id: int | None = None,
+        group_id: int,
         traffic_source_id: int | None = None,
+        domain_id: int | None = None,
     ) -> CampaignSummary:
         name = name.strip()
         if not name:
@@ -40,9 +40,11 @@ class CreateCampaignUseCase:
             raise InvalidCountryCodeError(str(error)) from error
         if type(offer_id) is not int or offer_id <= 0:
             raise DomainError("Offer is required")
+        if type(group_id) is not int or group_id <= 0:
+            raise DomainError("Group is required")
         if any(
             type(value) is not int or value <= 0
-            for value in (domain_id, group_id, traffic_source_id)
+            for value in (domain_id, traffic_source_id)
             if value is not None
         ):
             raise DomainError("Optional catalog IDs must be positive integers")
@@ -59,7 +61,7 @@ class CreateCampaignUseCase:
                     "type": "position",
                     "state": "active",
                     **({"domain_id": domain_id} if domain_id is not None else {}),
-                    **({"group_id": str(group_id)} if group_id is not None else {}),
+                    "group_id": str(group_id),
                     **(
                         {"traffic_source_id": traffic_source_id}
                         if traffic_source_id is not None

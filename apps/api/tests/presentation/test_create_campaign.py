@@ -29,9 +29,12 @@ def tracker_settings(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     get_settings.cache_clear()
 
 
-@pytest.mark.parametrize("legacy_ids", [False, True])
+@pytest.mark.parametrize("with_domain", [False, True])
+@pytest.mark.parametrize("with_source", [False, True])
 @respx.mock
-async def test_create_campaign_builds_two_flows(client: AsyncClient, legacy_ids: bool) -> None:
+async def test_create_campaign_builds_two_flows(
+    client: AsyncClient, with_domain: bool, with_source: bool
+) -> None:
     campaign = respx.post(f"{BASE}/campaigns").respond(200, json={"id": 42})
     flows = respx.post(f"{BASE}/streams").mock(
         side_effect=[
@@ -41,9 +44,11 @@ async def test_create_campaign_builds_two_flows(client: AsyncClient, legacy_ids:
     )
     payload = (
         PAYLOAD
-        if legacy_ids
-        else {key: PAYLOAD[key] for key in ("name", "country_code", "offer_id")}
+        if with_domain
+        else {key: value for key, value in PAYLOAD.items() if key != "domain_id"}
     )
+    if not with_source:
+        payload = {key: value for key, value in payload.items() if key != "traffic_source_id"}
     response = await client.post("/api/v1/campaigns", json=payload)
     assert response.status_code == 201
     body = json.loads(campaign.calls[0].request.content)
@@ -52,7 +57,9 @@ async def test_create_campaign_builds_two_flows(client: AsyncClient, legacy_ids:
         "name": "MX Campaign",
         "type": "position",
         "state": "active",
-        **({"domain_id": 1, "group_id": "2", "traffic_source_id": 3} if legacy_ids else {}),
+        "group_id": "2",
+        **({"traffic_source_id": 3} if with_source else {}),
+        **({"domain_id": 1} if with_domain else {}),
     }
     assert response.json()["id"] == 42
     assert response.json()["name"] == "MX Campaign"
@@ -87,7 +94,9 @@ async def test_create_campaign_builds_two_flows(client: AsyncClient, legacy_ids:
     }
 
 
-@pytest.mark.parametrize("field", ["name", "country_code", "offer_id"])
+@pytest.mark.parametrize(
+    "field", ["name", "country_code", "offer_id", "group_id"]
+)
 @respx.mock
 async def test_all_creator_fields_required(client: AsyncClient, field: str) -> None:
     payload = {key: value for key, value in PAYLOAD.items() if key != field}
@@ -108,6 +117,7 @@ async def test_all_creator_fields_required(client: AsyncClient, field: str) -> N
         ("country_code", "USA"),
         ("country_code", "US,MX"),
         ("country_code", "U1"),
+        ("group_id", None),
         *[
             (field, value)
             for field in ("offer_id", "domain_id", "group_id", "traffic_source_id")

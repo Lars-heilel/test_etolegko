@@ -39,6 +39,10 @@ class CatalogGateway(Protocol):
     async def get_offer(self, offer_id: int) -> CatalogItem: ...
 
 
+class TrafficSourceGateway(Protocol):
+    async def create_traffic_source(self, name: str) -> CatalogItem: ...
+
+
 class FlowGateway(Protocol):
     async def list_flows(self, campaign_id: int) -> list[KeitaroFlowSnapshot]: ...
 

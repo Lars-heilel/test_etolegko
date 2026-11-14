@@ -55,9 +55,9 @@ async def create_campaign(
         payload.name,
         payload.country_code,
         payload.offer_id,
-        payload.domain_id,
-        payload.group_id,
-        payload.traffic_source_id,
+        domain_id=payload.domain_id,
+        group_id=payload.group_id,
+        traffic_source_id=payload.traffic_source_id,
     )
     return CampaignSummaryResponse(
         id=created.id, name=created.name, state=created.state, alias=created.alias

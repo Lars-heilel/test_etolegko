@@ -39,13 +39,15 @@ export type CreateCampaignPayload = {
   country_code: string
   offer_id: number
   domain_id?: number
-  group_id?: number
+  group_id: number
   traffic_source_id?: number
 }
 
 export const campaignsApi = {
   list: () => apiRequest<CampaignSummary[]>("/campaigns"),
   formOptions: () => apiRequest<FormOptions>("/campaigns/form-options"),
+  createTrafficSource: (name: string) =>
+    apiRequest<CatalogItem>("/traffic-sources", { method: "POST", body: { name } }),
   offers: () => apiRequest<CatalogItem[]>("/offers"),
   create: (payload: CreateCampaignPayload) =>
     apiRequest<CampaignSummary>("/campaigns", { method: "POST", body: payload }),
