@@ -1,10 +1,16 @@
 import { Link, useParams } from "react-router-dom"
 import { ArrowLeftIcon } from "lucide-react"
 
+import { getApiErrorMessage } from "@/shared/lib/get-api-error-message"
 import { Alert, AlertDescription, AlertTitle, Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@/shared/ui"
+
+import { useCampaignOffers } from "../api/use-campaign-offers"
+import { FlowOffersCard } from "./flow-offers-card"
 
 export function CampaignEditPage() {
   const { campaignId } = useParams()
+  const id = Number(campaignId)
+  const validId = /^\d+$/.test(campaignId ?? "") && Number.isSafeInteger(id) && id > 0
 
   return (
     <div className="flex flex-col gap-6">
@@ -24,20 +30,41 @@ export function CampaignEditPage() {
         </p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Редактор офферов</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Alert>
-            <AlertTitle>Этап инициализации</AlertTitle>
-            <AlertDescription>
-              Загрузка кампании из Keitaro, добавление и удаление офферов будут добавлены
-              на следующем этапе.
-            </AlertDescription>
-          </Alert>
-        </CardContent>
-      </Card>
+      {validId ? <CampaignOffersEditor key={id} campaignId={id} /> : (
+        <Alert variant="destructive"><AlertTitle>Некорректный ID кампании</AlertTitle></Alert>
+      )}
     </div>
+  )
+}
+
+function CampaignOffersEditor({ campaignId }: { campaignId: number }) {
+  const { rotation, refresh } = useCampaignOffers(campaignId)
+
+  return (
+    <>
+      <Button className="w-fit" disabled={refresh.isPending} onClick={() => refresh.mutate()}>Получить потоки</Button>
+      {refresh.isPending && <p role="status" className="text-sm text-muted-foreground">Загрузка потоков…</p>}
+      {refresh.error && (
+        <Alert variant="destructive">
+          <AlertTitle>Не удалось получить потоки</AlertTitle>
+          <AlertDescription>{getApiErrorMessage(refresh.error)}</AlertDescription>
+        </Alert>
+      )}
+      {!rotation && !refresh.isPending && (
+        <Card>
+          <CardHeader><CardTitle>Потоки не загружены</CardTitle></CardHeader>
+          <CardContent className="text-sm text-muted-foreground">
+            Нажмите «Получить потоки», чтобы загрузить данные из Keitaro.
+          </CardContent>
+        </Card>
+      )}
+      {rotation?.flows.length === 0 && (
+        <Card>
+          <CardHeader><CardTitle>Потоков нет</CardTitle></CardHeader>
+          <CardContent className="text-sm text-muted-foreground">В кампании пока нет потоков.</CardContent>
+        </Card>
+      )}
+      {rotation?.flows.map((flow) => <FlowOffersCard key={flow.stream_id} flow={flow} disabled={refresh.isPending} />)}
+    </>
   )
 }
