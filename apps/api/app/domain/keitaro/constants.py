@@ -1,0 +1,5 @@
+GOOGLE_REDIRECT_URL = "https://www.google.com"
+COUNTRY_FILTER_NAME = "country"
+REDIRECT_ACTION_TYPE = "http"
+OFFERS_ACTION_TYPE = "http"
+OFFER_FLOW_SCHEMA = "landings"
