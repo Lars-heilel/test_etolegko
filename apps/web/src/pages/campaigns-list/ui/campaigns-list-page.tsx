@@ -1,9 +1,23 @@
+import { useMemo, useState } from "react"
 import { Link } from "react-router-dom"
 import { PlusIcon } from "lucide-react"
 
-import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/ui"
+import { getApiErrorMessage } from "@/shared/lib/get-api-error-message"
+import {
+  Alert, AlertDescription, AlertTitle, Button, Card, CardContent,
+  CardHeader, CardTitle, Input, Skeleton,
+} from "@/shared/ui"
+
+import { useCampaigns } from "../api/use-campaigns"
 
 export function CampaignsListPage() {
+  const [search, setSearch] = useState("")
+  const { data, isPending, error } = useCampaigns()
+  const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase()
+    return (data ?? []).filter((campaign) => campaign.name.toLowerCase().includes(term))
+  }, [data, search])
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between gap-4">
@@ -23,22 +37,35 @@ export function CampaignsListPage() {
 
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between gap-4">
-            <CardTitle>Список кампаний</CardTitle>
-            <Badge variant="secondary">Окружение готово</Badge>
-          </div>
-          <CardDescription>
-            Здесь появится список кампаний после подключения Keitaro API.
-          </CardDescription>
+          <CardTitle>Список кампаний</CardTitle>
+          <Input
+            aria-label="Поиск кампаний"
+            placeholder="Поиск по названию"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
         </CardHeader>
-        <CardContent>
-          <div className="flex min-h-48 flex-col items-center justify-center gap-3 rounded-lg border border-dashed p-6 text-center">
-            <p className="text-sm font-medium">Пока пусто</p>
-            <p className="max-w-md text-sm text-muted-foreground">
-              Это заглушка этапа инициализации проекта. Бизнес-логика и запросы к Keitaro
-              добавляются на следующем этапе.
-            </p>
-          </div>
+        <CardContent className="flex flex-col gap-2">
+          {isPending && <Skeleton role="status" aria-label="Загрузка кампаний" className="h-24 w-full" />}
+          {error && (
+            <Alert variant="destructive">
+              <AlertTitle>Не удалось загрузить кампании</AlertTitle>
+              <AlertDescription>{getApiErrorMessage(error)}</AlertDescription>
+            </Alert>
+          )}
+          {!isPending && !error && filtered.length === 0 && (
+            <p className="text-sm text-muted-foreground">Кампании не найдены.</p>
+          )}
+          {filtered.map((campaign) => (
+            <Link
+              key={campaign.id}
+              to={`/campaigns/${campaign.id}/edit`}
+              className="flex items-center justify-between rounded-lg border p-4 hover:bg-accent"
+            >
+              <span className="font-medium">{campaign.name}</span>
+              <span className="text-sm text-muted-foreground">{campaign.state}</span>
+            </Link>
+          ))}
         </CardContent>
       </Card>
     </div>
