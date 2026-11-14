@@ -1,3 +1,10 @@
+from typing import Literal
+
+GatewayFailureCategory = Literal[
+    "unknown", "transport", "http_response", "malformed_response", "configuration"
+]
+
+
 class DomainError(Exception):
     code = "VALIDATION_ERROR"
 
@@ -13,11 +20,32 @@ class InvalidCountryCodeError(DomainError):
 class GatewayError(Exception):
     """An external gateway operation failed; its result may be unknown."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        upstream_status: int | None = None,
+        upstream_category: GatewayFailureCategory = "unknown",
+    ) -> None:
+        super().__init__(message)
+        self.upstream_status = upstream_status
+        self.upstream_category = upstream_category
+
 
 class CampaignCreationError(DomainError):
     code = "KEITARO_UNAVAILABLE"
 
-    def __init__(self, campaign_id: int | None, failed_step: str, confirmed_flows: int) -> None:
+    def __init__(
+        self,
+        campaign_id: int | None,
+        failed_step: str,
+        confirmed_flows: int,
+        *,
+        upstream_status: int | None = None,
+        upstream_category: GatewayFailureCategory = "unknown",
+    ) -> None:
+        self.upstream_status = upstream_status
+        self.upstream_category = upstream_category
         self.campaign_id = campaign_id
         self.failed_step = failed_step
         self.confirmed_flows = confirmed_flows

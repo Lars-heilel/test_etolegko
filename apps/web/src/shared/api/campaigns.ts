@@ -38,9 +38,9 @@ export type CreateCampaignPayload = {
   name: string
   country_code: string
   offer_id: number
-  domain_id: number
-  group_id: number
-  traffic_source_id: number
+  domain_id?: number
+  group_id?: number
+  traffic_source_id?: number
 }
 
 export const campaignsApi = {

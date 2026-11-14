@@ -9,9 +9,9 @@ class CreateCampaignRequest(BaseModel):
     name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
     country_code: str
     offer_id: Annotated[int, Field(strict=True, gt=0)]
-    domain_id: Annotated[int, Field(strict=True, gt=0)]
-    group_id: Annotated[int, Field(strict=True, gt=0)]
-    traffic_source_id: Annotated[int, Field(strict=True, gt=0)]
+    domain_id: Annotated[int | None, Field(strict=True, gt=0)] = None
+    group_id: Annotated[int | None, Field(strict=True, gt=0)] = None
+    traffic_source_id: Annotated[int | None, Field(strict=True, gt=0)] = None
 
     @field_validator("country_code")
     @classmethod

@@ -29,8 +29,9 @@ def tracker_settings(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     get_settings.cache_clear()
 
 
+@pytest.mark.parametrize("legacy_ids", [False, True])
 @respx.mock
-async def test_create_campaign_builds_two_flows(client: AsyncClient) -> None:
+async def test_create_campaign_builds_two_flows(client: AsyncClient, legacy_ids: bool) -> None:
     campaign = respx.post(f"{BASE}/campaigns").respond(200, json={"id": 42})
     flows = respx.post(f"{BASE}/streams").mock(
         side_effect=[
@@ -38,7 +39,12 @@ async def test_create_campaign_builds_two_flows(client: AsyncClient) -> None:
             httpx.Response(200, json={"id": 101}),
         ]
     )
-    response = await client.post("/api/v1/campaigns", json=PAYLOAD)
+    payload = (
+        PAYLOAD
+        if legacy_ids
+        else {key: PAYLOAD[key] for key in ("name", "country_code", "offer_id")}
+    )
+    response = await client.post("/api/v1/campaigns", json=payload)
     assert response.status_code == 201
     body = json.loads(campaign.calls[0].request.content)
     assert re.fullmatch(r"mx-campaign-[a-f0-9]{8}", body.pop("alias"))
@@ -46,9 +52,7 @@ async def test_create_campaign_builds_two_flows(client: AsyncClient) -> None:
         "name": "MX Campaign",
         "type": "position",
         "state": "active",
-        "domain_id": 1,
-        "group_id": "2",
-        "traffic_source_id": 3,
+        **({"domain_id": 1, "group_id": "2", "traffic_source_id": 3} if legacy_ids else {}),
     }
     assert response.json()["id"] == 42
     assert response.json()["name"] == "MX Campaign"
@@ -83,7 +87,7 @@ async def test_create_campaign_builds_two_flows(client: AsyncClient) -> None:
     }
 
 
-@pytest.mark.parametrize("field", list(PAYLOAD))
+@pytest.mark.parametrize("field", ["name", "country_code", "offer_id"])
 @respx.mock
 async def test_all_creator_fields_required(client: AsyncClient, field: str) -> None:
     payload = {key: value for key, value in PAYLOAD.items() if key != field}
@@ -124,17 +128,19 @@ async def test_invalid_creator_input_never_writes(
 
 
 @pytest.mark.parametrize("stage", ["campaign", "google_flow", "offer_flow"])
-@pytest.mark.parametrize("failure", ["timeout", "500", "400", "invalid_json", "missing_id"])
+@pytest.mark.parametrize("failure", ["timeout", "500", "400", "403", "invalid_json", "missing_id"])
 @respx.mock
 async def test_creation_failure_is_truthful_and_never_retried(
     client: AsyncClient,
     stage: str,
     failure: str,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     error = {
         "timeout": httpx.ReadTimeout("test-only-key"),
         "500": httpx.Response(500, text="test-only-key"),
         "400": httpx.Response(400, json={"message": "test-only-key"}),
+        "403": httpx.Response(403, json={"message": "test-only-key"}),
         "invalid_json": httpx.Response(200, text="test-only-key"),
         "missing_id": httpx.Response(200, json={}),
     }[failure]
@@ -157,6 +163,24 @@ async def test_creation_failure_is_truthful_and_never_retried(
     assert detail["failed_step"] == stage
     assert detail["confirmed_flows"] == (1 if stage == "offer_flow" else 0)
     assert "test-only-key" not in response.text
+    expected_status, expected_category = {
+        "timeout": (None, "transport"),
+        "500": (500, "http_response"),
+        "400": (400, "http_response"),
+        "403": (403, "http_response"),
+        "invalid_json": (200, "malformed_response"),
+        "missing_id": (None if stage == "campaign" else 200, "malformed_response"),
+    }[failure]
+    assert detail["upstream_status"] == expected_status
+    assert detail["upstream_category"] == expected_category
+    records = [r for r in caplog.records if r.name == "app.presentation.errors"]
+    assert len(records) == 1
+    assert f"upstream_status={expected_status}" in records[0].getMessage()
+    assert f"upstream_category={expected_category}" in records[0].getMessage()
+    assert "test-only-key" not in caplog.text
+    assert "tracker.example.com" not in records[0].getMessage()
+    assert "MX Campaign" not in records[0].getMessage()
+    assert records[0].exc_info is None
     assert campaign.call_count == 1
     assert len(respx.calls) == {"campaign": 1, "google_flow": 2, "offer_flow": 3}[stage]
 

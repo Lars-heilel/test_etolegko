@@ -32,15 +32,18 @@ class KeitaroClient:
         # A failed POST may already have created a resource on the tracker.
         attempts = 3 if method in {"GET", "PUT"} else 1
         message = "Keitaro is unavailable"
+        upstream_status = None
         for attempt in range(attempts):
             try:
                 response = await self._client.request(method, f"/admin_api/v1{path}", **kwargs)
             except httpx.TransportError:
                 # Transport exceptions can contain URLs; keep credentials out of errors.
                 message = "Could not connect to Keitaro"
+                upstream_status = None
             else:
                 if response.status_code >= 500:
                     message = f"Keitaro returned {response.status_code}"
+                    upstream_status = response.status_code
                 elif response.status_code >= 400:
                     error_message = response.text
                     try:
@@ -62,7 +65,7 @@ class KeitaroClient:
                         ) from None
             if attempt + 1 < attempts:
                 await asyncio.sleep(0.2 * (2**attempt))
-        raise KeitaroUnavailableError(message)
+        raise KeitaroUnavailableError(message, status_code=upstream_status)
 
     async def get(self, path: str, params: dict[str, Any] | None = None) -> Any:
         return await self._request("GET", path, params=params)

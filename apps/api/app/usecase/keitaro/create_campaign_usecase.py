@@ -27,9 +27,9 @@ class CreateCampaignUseCase:
         name: str,
         country_code: str,
         offer_id: int,
-        domain_id: int,
-        group_id: int,
-        traffic_source_id: int,
+        domain_id: int | None = None,
+        group_id: int | None = None,
+        traffic_source_id: int | None = None,
     ) -> CampaignSummary:
         name = name.strip()
         if not name:
@@ -38,11 +38,14 @@ class CreateCampaignUseCase:
             country = CountryCode(country_code)
         except ValueError as error:
             raise InvalidCountryCodeError(str(error)) from error
+        if type(offer_id) is not int or offer_id <= 0:
+            raise DomainError("Offer is required")
         if any(
             type(value) is not int or value <= 0
-            for value in (offer_id, domain_id, group_id, traffic_source_id)
+            for value in (domain_id, group_id, traffic_source_id)
+            if value is not None
         ):
-            raise DomainError("Offer, domain, group and traffic source are required")
+            raise DomainError("Optional catalog IDs must be positive integers")
 
         alias = _slug(name)
         campaign_id = None
@@ -55,24 +58,36 @@ class CreateCampaignUseCase:
                     "alias": alias,
                     "type": "position",
                     "state": "active",
-                    "domain_id": domain_id,
-                    "group_id": str(group_id),
-                    "traffic_source_id": traffic_source_id,
+                    **({"domain_id": domain_id} if domain_id is not None else {}),
+                    **({"group_id": str(group_id)} if group_id is not None else {}),
+                    **(
+                        {"traffic_source_id": traffic_source_id}
+                        if traffic_source_id is not None
+                        else {}
+                    ),
                 }
             )
             # Do not guess an ID or proceed with writes after a malformed response.
             raw_id = created.get("id") if isinstance(created, dict) else None
             if type(raw_id) is not int or raw_id <= 0:
-                raise GatewayError("Invalid campaign response")
+                raise GatewayError(
+                    "Invalid campaign response", upstream_category="malformed_response"
+                )
             campaign_id = raw_id
             step = "google_flow"
             await self._flows.create_google_flow(campaign_id, country.value)
             confirmed_flows = 1
             step = "offer_flow"
             await self._flows.create_offer_flow(campaign_id, offer_id)
-        except GatewayError:
+        except GatewayError as error:
             # No retry or rollback: a failed POST can already have taken effect.
-            raise CampaignCreationError(campaign_id, step, confirmed_flows) from None
+            raise CampaignCreationError(
+                campaign_id,
+                step,
+                confirmed_flows,
+                upstream_status=error.upstream_status,
+                upstream_category=error.upstream_category,
+            ) from None
 
         return CampaignSummary(
             id=campaign_id,

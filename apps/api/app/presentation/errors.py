@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -13,10 +15,12 @@ from app.domain.keitaro.exceptions import (
 )
 from app.infrastructure.keitaro.errors import KeitaroError, KeitaroUnavailableError
 
+logger = logging.getLogger(__name__)
+
 
 def install_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(DomainError)
-    async def domain_error(_: Request, error: DomainError) -> JSONResponse:
+    async def domain_error(request: Request, error: DomainError) -> JSONResponse:
         content: dict[str, object] = {"code": error.code, "message": error.message}
         status_code = 422
         if isinstance(error, (CampaignNotFoundError, FlowNotFoundError, OfferNotFoundError)):
@@ -29,6 +33,19 @@ def install_error_handlers(app: FastAPI) -> None:
                 campaign_id=error.campaign_id,
                 failed_step=error.failed_step,
                 confirmed_flows=error.confirmed_flows,
+                upstream_status=error.upstream_status,
+                upstream_category=error.upstream_category,
+            )
+            # Deliberately exclude exception text/traceback, upstream bodies and request data.
+            logger.warning(
+                "Campaign creation incomplete request_id=%s failed_step=%s "
+                "campaign_id=%s confirmed_flows=%s upstream_status=%s upstream_category=%s",
+                getattr(request.state, "request_id", None),
+                error.failed_step,
+                error.campaign_id,
+                error.confirmed_flows,
+                error.upstream_status,
+                error.upstream_category,
             )
         elif isinstance(error, CampaignOffersSaveError):
             status_code = 502
