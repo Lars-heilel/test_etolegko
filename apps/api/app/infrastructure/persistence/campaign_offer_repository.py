@@ -113,7 +113,9 @@ class SqlAlchemyCampaignOfferRepository:
                     by_key[key] = row
                 row.stream_name = flow.name
                 row.offer_name = offer_names.get(item.offer_id, row.offer_name)
-                row.share = item.share
+                # Refresh respects local locks without rebalancing remote weights.
+                if not (row.state == OfferState.ACTIVE.value and row.locked):
+                    row.share = item.share
                 row.state = OfferState.ACTIVE.value
         for row in rows:
             row.stream_name = names[row.stream_id]

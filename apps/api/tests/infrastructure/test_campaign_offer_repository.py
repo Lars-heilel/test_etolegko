@@ -98,7 +98,7 @@ async def test_sync_reconciles_remote_shares_names_locks_and_missing_offers(
     assert [
         (o.offer_id.value, o.name, o.share.value, o.state.value, o.locked) for o in loaded.offers
     ] == [
-        (1, "Updated", 20, "active", True),
+        (1, "Updated", 70, "active", True),
         (2, "Two", 30, "active", False),
         (3, "Offer 3", 50, "active", False),
     ]
@@ -118,6 +118,75 @@ async def test_sync_reconciles_remote_shares_names_locks_and_missing_offers(
         (3, 100, "active", False),
     ]
     assert await repository.list_by_campaign(CampaignId(4)) == [flow()]
+
+
+@pytest.mark.parametrize(
+    ("locked_share", "remote_share", "expected_total"),
+    [(70, 20, 150), (70, 90, 80), (0, 20, 80)],
+)
+async def test_refresh_preserves_locked_share_without_rebalancing_remote_offers(
+    db_session: AsyncSession,
+    locked_share: int,
+    remote_share: int,
+    expected_total: int,
+) -> None:
+    repository = SqlAlchemyCampaignOfferRepository(db_session)
+    original = FlowOffers.rehydrate(
+        StreamId(7),
+        "Main",
+        [CampaignOffer(OfferId(1), "One", OfferShare(locked_share), OfferState.ACTIVE, True)],
+    )
+    await repository.save(CampaignId(3), original)
+    await db_session.commit()
+    await repository.sync_from_keitaro(
+        CampaignId(3),
+        [
+            KeitaroFlowSnapshot(
+                7,
+                "Main",
+                [
+                    KeitaroOfferSnapshot(1, remote_share),
+                    KeitaroOfferSnapshot(2, 100 - remote_share),
+                ],
+            )
+        ],
+        [7],
+        {},
+    )
+    await db_session.commit()
+    db_session.expunge_all()
+    loaded = (await repository.list_by_campaign(CampaignId(3)))[0]
+    assert [(o.share.value, o.locked) for o in loaded.offers] == [
+        (locked_share, True),
+        (100 - remote_share, False),
+    ]
+    assert sum(o.share.value for o in loaded.offers) == expected_total
+
+    # External deletion overrides the lock; reappearance must use remote weight.
+    await repository.sync_from_keitaro(
+        CampaignId(3),
+        [KeitaroFlowSnapshot(7, "Main", [KeitaroOfferSnapshot(2, 100)])],
+        [7],
+        {},
+    )
+    await db_session.commit()
+    db_session.expunge_all()
+    deleted = (await repository.list_by_campaign(CampaignId(3)))[0].offers[0]
+    assert (deleted.share.value, deleted.state, deleted.locked) == (0, OfferState.DELETED, False)
+    await repository.sync_from_keitaro(
+        CampaignId(3),
+        [
+            KeitaroFlowSnapshot(
+                7, "Main", [KeitaroOfferSnapshot(1, 40), KeitaroOfferSnapshot(2, 60)]
+            )
+        ],
+        [7],
+        {},
+    )
+    await db_session.commit()
+    db_session.expunge_all()
+    restored = (await repository.list_by_campaign(CampaignId(3)))[0].offers[0]
+    assert (restored.share.value, restored.state, restored.locked) == (40, OfferState.ACTIVE, False)
 
 
 async def test_sync_skips_empty_flow_contents_and_removes_obsolete_flows(
