@@ -150,3 +150,67 @@ def test_active_offers_excludes_deleted_offers() -> None:
     )
 
     assert [item.offer_id.value for item in flow.active_offers()] == [1]
+
+
+def test_failed_add_offer_leaves_the_flow_unchanged() -> None:
+    flow = FlowOffers.rehydrate(
+        StreamId(10),
+        "Main",
+        [offer(1, 60, locked=True), offer(2, 60, locked=True)],
+    )
+
+    with pytest.raises(ShareTotalError):
+        flow.add_offer(OfferId(3), "Offer 3")
+
+    assert shares(flow) == {1: 60, 2: 60}
+    assert [item.offer_id.value for item in flow.offers] == [1, 2]
+
+
+def test_failed_delete_offer_leaves_the_flow_unchanged() -> None:
+    flow = FlowOffers.rehydrate(
+        StreamId(10),
+        "Main",
+        [offer(1, 60, locked=True), offer(2, 60, locked=True), offer(3, 60, locked=True)],
+    )
+
+    with pytest.raises(ShareTotalError):
+        flow.delete_offer(OfferId(2))
+
+    assert shares(flow) == {1: 60, 2: 60, 3: 60}
+    assert flow.offers[1].state is OfferState.ACTIVE
+
+
+def test_failed_lock_leaves_the_flow_unchanged() -> None:
+    flow = FlowOffers.rehydrate(
+        StreamId(10),
+        "Main",
+        [offer(1, 60, locked=True), offer(2, 60)],
+    )
+
+    with pytest.raises(ShareTotalError):
+        flow.set_locked(OfferId(2), True)
+
+    assert flow.offers[1].locked is False
+    assert shares(flow) == {1: 60, 2: 60}
+
+
+def test_new_offer_gets_zero_when_every_existing_active_offer_is_locked() -> None:
+    flow = FlowOffers.rehydrate(
+        StreamId(10),
+        "Main",
+        [offer(1, 50, locked=True), offer(2, 50)],
+    )
+
+    flow.delete_offer(OfferId(2))
+    flow.add_offer(OfferId(3), "Offer 3")
+
+    assert shares(flow) == {1: 50, 2: 0, 3: 0}
+
+
+def test_rehydrate_copies_the_offers_list() -> None:
+    offers = [offer(1, 50)]
+    flow = FlowOffers.rehydrate(StreamId(10), "Main", offers)
+
+    offers.append(offer(2, 50))
+
+    assert [item.offer_id.value for item in flow.offers] == [1]
