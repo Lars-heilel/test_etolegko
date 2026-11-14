@@ -21,3 +21,10 @@ Base: `6d5bf55`. Scope: campaign editor actions only.
 
 ## Self-review
 Reviewed the spec's FR-020–029, mutation endpoint arguments, response replacement, pending-state coverage, error preservation, dialog labeling and page-local FSD boundaries. Tests cover per-flow filtering, active/deleted exclusions, last deletion, restore, both lock directions, active zero, Save response, every mutation failure, catalog retry, pending conflicts and late mutation responses after navigation. No outstanding task-13 issues found. No backend or shared UI changes.
+
+## Review fixes
+- Explicitly disabled catalog refetch on reconnect and window focus; opening the picker and manual retry remain the fetching triggers.
+- New editor operations (including picker open) reset previous failed mutation states. Current failures remain visible until another operation starts; rotation is never cleared. Pending guards and keyed route isolation remain intact.
+- Added behavioral regressions for reconnect after catalog failure followed by manual retry, switching from failed deletion to pending/failed Save, and reopening after add failure.
+- Red: all three new regressions failed before the fixes (17 existing tests passed).
+- Green: full frontend suite passed, 49 tests / 6 files, including route isolation and pending/failure coverage. Typecheck and diff check passed; lint passed with the same three existing shared-component Fast Refresh warnings.

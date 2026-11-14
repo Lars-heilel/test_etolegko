@@ -44,12 +44,19 @@ function CampaignOffersEditor({ campaignId }: { campaignId: number }) {
   const { rotation, refresh, add, remove, restore, lock, save, pending } = useCampaignOffers(campaignId)
   const [pickerStream, setPickerStream] = useState<number | null>(null)
   const pickerFlow = rotation?.flows.find((flow) => flow.stream_id === pickerStream)
+  const startOperation = (operation: () => void) => {
+    if (pending) return
+    for (const request of [refresh, add, remove, restore, lock, save]) {
+      if (request.isError) request.reset()
+    }
+    operation()
+  }
 
   return (
     <>
       <div className="flex gap-2">
-        <Button disabled={pending} onClick={() => refresh.mutate()}>Получить потоки</Button>
-        <Button disabled={!rotation || pending} onClick={() => save.mutate(undefined, { onSuccess: () => toast.success("Изменения сохранены в Keitaro") })}>Сохранить</Button>
+        <Button disabled={pending} onClick={() => startOperation(() => refresh.mutate())}>Получить потоки</Button>
+        <Button disabled={!rotation || pending} onClick={() => startOperation(() => save.mutate(undefined, { onSuccess: () => toast.success("Изменения сохранены в Keitaro") }))}>Сохранить</Button>
       </div>
       {refresh.isPending && <p role="status" className="text-sm text-muted-foreground">Загрузка потоков…</p>}
       {refresh.error && (
@@ -80,16 +87,16 @@ function CampaignOffersEditor({ campaignId }: { campaignId: number }) {
       )}
       {rotation?.flows.map((flow) => (
         <FlowOffersCard key={flow.stream_id} flow={flow} disabled={pending}
-          onAdd={() => setPickerStream(flow.stream_id)}
-          onDelete={(offer) => remove.mutate({ streamId: flow.stream_id, offerId: offer.offer_id })}
-          onRestore={(offer) => restore.mutate({ streamId: flow.stream_id, offerId: offer.offer_id })}
-          onLock={(offer) => lock.mutate({ streamId: flow.stream_id, offer })}
+          onAdd={() => startOperation(() => setPickerStream(flow.stream_id))}
+          onDelete={(offer) => startOperation(() => remove.mutate({ streamId: flow.stream_id, offerId: offer.offer_id }))}
+          onRestore={(offer) => startOperation(() => restore.mutate({ streamId: flow.stream_id, offerId: offer.offer_id }))}
+          onLock={(offer) => startOperation(() => lock.mutate({ streamId: flow.stream_id, offer }))}
         />
       ))}
       {pickerFlow && (
         <OfferPickerDialog flow={pickerFlow} pending={pending} error={add.error}
           onClose={() => setPickerStream(null)}
-          onPick={(offerId) => add.mutate({ streamId: pickerFlow.stream_id, offerId }, { onSuccess: () => setPickerStream(null) })}
+          onPick={(offerId) => startOperation(() => add.mutate({ streamId: pickerFlow.stream_id, offerId }, { onSuccess: () => setPickerStream(null) }))}
         />
       )}
     </>

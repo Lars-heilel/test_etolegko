@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import { onlineManager, QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { act, fireEvent, render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { createMemoryRouter, Link, RouterProvider } from "react-router-dom"
@@ -134,6 +134,55 @@ describe("CampaignEditPage", () => {
     expect(await screen.findByText("catalog failed")).toBeInTheDocument()
     await userEvent.click(screen.getByRole("button", { name: "Повторить" }))
     expect(await screen.findByText("Подходящих офферов нет.")).toBeInTheDocument()
+  })
+
+  it("keeps a catalog failure on reconnect until the user retries", async () => {
+    vi.spyOn(campaignsApi, "offers").mockRejectedValueOnce(new ApiError(503, "Unavailable", { message: "catalog offline" })).mockResolvedValueOnce([{ id: 9, name: "Nine" }])
+    renderEditor()
+    await userEvent.click(screen.getByRole("button", { name: "Получить потоки" }))
+    await userEvent.click(await screen.findByRole("button", { name: "Добавить оффер" }))
+    await screen.findByText("catalog offline")
+    await act(async () => {
+      onlineManager.setOnline(false)
+      onlineManager.setOnline(true)
+      await new Promise(resolve => setTimeout(resolve, 20))
+    })
+    expect(screen.getByText("catalog offline")).toBeInTheDocument()
+    expect(campaignsApi.offers).toHaveBeenCalledTimes(1)
+    await userEvent.click(screen.getByRole("button", { name: "Повторить" }))
+    expect(await screen.findByRole("button", { name: "Nine" })).toBeInTheDocument()
+  })
+
+  it("clears an earlier mutation error when another operation starts and shows its own failure", async () => {
+    vi.spyOn(campaignsApi, "deleteOffer").mockRejectedValue(new ApiError(409, "Conflict", { message: "delete failed" }))
+    let reject!: (error: Error) => void
+    vi.spyOn(campaignsApi, "saveOffers").mockImplementation(() => new Promise<OfferRotation>((_, fail) => { reject = fail }))
+    renderEditor()
+    await userEvent.click(screen.getByRole("button", { name: "Получить потоки" }))
+    await screen.findByText("Main")
+    await userEvent.click(screen.getAllByRole("button", { name: "Удалить" })[0])
+    await screen.findByText("delete failed")
+    await userEvent.click(screen.getByRole("button", { name: "Сохранить" }))
+    expect(screen.queryByText("delete failed")).not.toBeInTheDocument()
+    expect(screen.getByText("70%")).toBeInTheDocument()
+    await act(async () => { reject(new ApiError(503, "Unavailable", { message: "save failed" })) })
+    expect(await screen.findByText("save failed")).toBeInTheDocument()
+    expect(screen.getByText("70%")).toBeInTheDocument()
+  })
+
+  it("clears a previous add failure when reopening the picker", async () => {
+    vi.spyOn(campaignsApi, "offers").mockResolvedValue([{ id: 9, name: "Nine" }])
+    vi.spyOn(campaignsApi, "addOffer").mockRejectedValue(new ApiError(409, "Conflict", { message: "previous add failed" }))
+    renderEditor()
+    await userEvent.click(screen.getByRole("button", { name: "Получить потоки" }))
+    await userEvent.click(await screen.findByRole("button", { name: "Добавить оффер" }))
+    await userEvent.click(await screen.findByRole("button", { name: "Nine" }))
+    await within(screen.getByRole("dialog")).findByText("previous add failed")
+    await userEvent.keyboard("{Escape}")
+    expect(screen.getByText("previous add failed")).toBeInTheDocument()
+    await userEvent.click(screen.getByRole("button", { name: "Добавить оффер" }))
+    expect(screen.queryByText("previous add failed")).not.toBeInTheDocument()
+    expect(await screen.findByRole("button", { name: "Nine" })).toBeEnabled()
   })
 
   it("loads manually, renders shares and states, and does not refresh on focus", async () => {

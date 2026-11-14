@@ -16,7 +16,10 @@ type Props = {
 export function OfferPickerDialog({ flow, pending, error, onClose, onPick }: Props) {
   const [search, setSearch] = useState("")
   const searchId = useId()
-  const offers = useQuery({ queryKey: ["offers"], queryFn: campaignsApi.offers, retry: false })
+  const offers = useQuery({
+    queryKey: ["offers"], queryFn: campaignsApi.offers, retry: false,
+    refetchOnReconnect: false, refetchOnWindowFocus: false,
+  })
   const used = new Set(flow.offers.map((offer) => offer.offer_id))
   const term = search.trim().toLowerCase()
   const filtered = (offers.data ?? []).filter((offer) => !used.has(offer.id) && offer.name.toLowerCase().includes(term))
