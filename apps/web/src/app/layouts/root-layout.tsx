@@ -1,5 +1,7 @@
 import { Link, Outlet } from "react-router-dom"
 
+import { Toaster } from "@/shared/ui"
+
 export function RootLayout() {
   return (
     <div className="flex min-h-svh flex-col bg-background text-foreground">
@@ -20,6 +22,7 @@ export function RootLayout() {
       </header>
       <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-6 py-8">
         <Outlet />
+        <Toaster richColors />
       </main>
     </div>
   )
