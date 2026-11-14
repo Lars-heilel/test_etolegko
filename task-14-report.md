@@ -3,7 +3,10 @@
 Date: 2026-11-14. Base: `d0f4937`. Status: local verification complete;
 live write acceptance blocked/unrun. No application code or dependencies changed.
 
-## Fresh checks
+## Observed verification results
+
+These commands ran during Task 14 before commit `3d07fb1`. The documentation-only
+follow-up reuses their observed results; it does not claim a new test/build run.
 
 | Command | Result |
 |---|---|
@@ -101,3 +104,15 @@ Keitaro-side deletion/restore (FR-026), and full live editor acceptance are **no
 complete**. Live catalogs lack domains and traffic sources, and this task permits
 only live reads. A populated, authorized test environment/campaign is needed.
 No remote writes were performed. The requirements checklist leaves these items open.
+
+## Documentation follow-up
+
+Confirmed this report is tracked at repository root in `3d07fb1`; README now links
+to it. Added numbered creator/editor instructions, share examples, local settings,
+and an explicit distinction between localhost startup and the required campaign
+domain catalog. Quickstart copies `.env.example` only when `.env` is absent.
+Reviewed Makefile-relative paths from repository root; `make -n install db-up
+migrate dev test lint typecheck` expands to the expected `apps/api`, `apps/web`,
+and `infra/docker-compose.yml` commands. This dry-run checks command resolution,
+not another server launch. Temporary API/Vite processes from verification were
+intentionally stopped; shutdown exit 143 is not a failed verification check.
