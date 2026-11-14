@@ -2,7 +2,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Path, status
 
-from app.domain.keitaro.exceptions import CampaignCreationError, DomainError
+from app.domain.keitaro.exceptions import (
+    CampaignCreationError,
+    CampaignOffersSaveError,
+    DomainError,
+)
 from app.domain.keitaro.value_objects.identifiers import CampaignId
 from app.presentation.api.keitaro.dependencies import (
     get_add_offer_usecase,
@@ -12,6 +16,7 @@ from app.presentation.api.keitaro.dependencies import (
     get_list_campaigns_usecase,
     get_refresh_usecase,
     get_restore_offer_usecase,
+    get_save_offers_usecase,
     get_set_lock_usecase,
 )
 from app.presentation.api.keitaro.responses import to_rotation_response
@@ -31,9 +36,30 @@ from app.usecase.keitaro.get_form_options_usecase import GetFormOptionsUseCase
 from app.usecase.keitaro.list_campaigns_usecase import ListCampaignsUseCase
 from app.usecase.keitaro.refresh_campaign_offers_usecase import RefreshCampaignOffersUseCase
 from app.usecase.keitaro.restore_offer_usecase import RestoreOfferUseCase
+from app.usecase.keitaro.save_campaign_offers_usecase import SaveCampaignOffersUseCase
 from app.usecase.keitaro.set_offer_lock_usecase import SetOfferLockUseCase
 
 router = APIRouter(prefix="/campaigns", tags=["campaigns"])
+
+
+@router.put("/{campaign_id}/offers", response_model=OfferRotationResponse)
+async def save_offers(
+    campaign_id: Annotated[int, Path(gt=0)],
+    usecase: Annotated[SaveCampaignOffersUseCase, Depends(get_save_offers_usecase)],
+) -> OfferRotationResponse:
+    try:
+        flows = await usecase.execute(campaign_id)
+    except CampaignOffersSaveError as error:
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "code": error.code,
+                "message": error.message,
+                "failed_stream_id": error.failed_stream_id,
+                "confirmed_stream_ids": error.confirmed_stream_ids,
+            },
+        ) from None
+    return to_rotation_response(campaign_id, flows)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)

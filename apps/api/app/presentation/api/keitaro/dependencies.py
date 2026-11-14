@@ -22,6 +22,7 @@ from app.usecase.keitaro.list_campaigns_usecase import ListCampaignsUseCase
 from app.usecase.keitaro.list_offers_usecase import ListOffersUseCase
 from app.usecase.keitaro.refresh_campaign_offers_usecase import RefreshCampaignOffersUseCase
 from app.usecase.keitaro.restore_offer_usecase import RestoreOfferUseCase
+from app.usecase.keitaro.save_campaign_offers_usecase import SaveCampaignOffersUseCase
 from app.usecase.keitaro.set_offer_lock_usecase import SetOfferLockUseCase
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
@@ -104,3 +105,9 @@ def get_restore_offer_usecase(repository: OfferRepositoryDep) -> RestoreOfferUse
 
 def get_set_lock_usecase(repository: OfferRepositoryDep) -> SetOfferLockUseCase:
     return SetOfferLockUseCase(repository)
+
+
+def get_save_offers_usecase(
+    repository: OfferRepositoryDep, flows: FlowGatewayDep
+) -> SaveCampaignOffersUseCase:
+    return SaveCampaignOffersUseCase(repository, flows)

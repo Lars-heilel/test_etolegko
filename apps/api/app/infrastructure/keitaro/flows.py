@@ -84,8 +84,15 @@ class KeitaroFlowGateway:
         )
         _validate_created_stream(created)
 
-    async def update_offers(self, stream_id: int, offers: list[tuple[int, int]]) -> None:
+    async def update_offers(
+        self, stream_id: int, offers: list[tuple[int, int]], *, campaign_id: int | None = None
+    ) -> None:
         stream: dict[str, Any] = await self._client.get(f"/streams/{stream_id}")
+        if not isinstance(stream, dict) or (
+            campaign_id is not None
+            and (type(stream.get("campaign_id")) is not int or stream["campaign_id"] != campaign_id)
+        ):
+            raise KeitaroResponseError(200, "Could not verify stream campaign ownership")
         payload = {
             key: value for key, value in stream.items() if key not in READ_ONLY_STREAM_FIELDS
         }

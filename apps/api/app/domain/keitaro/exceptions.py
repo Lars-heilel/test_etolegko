@@ -34,6 +34,18 @@ class CampaignNotFoundError(DomainError):
     code = "CAMPAIGN_NOT_FOUND"
 
 
+class CampaignOffersSaveError(DomainError):
+    code = "KEITARO_UNAVAILABLE"
+
+    def __init__(self, failed_stream_id: int, confirmed_stream_ids: list[int]) -> None:
+        self.failed_stream_id = failed_stream_id
+        self.confirmed_stream_ids = list(confirmed_stream_ids)
+        super().__init__(
+            "Offer save could not be completed. Confirmed streams remain saved; "
+            "the failed stream's result may be unknown. Check Keitaro before retrying."
+        )
+
+
 class FlowNotFoundError(DomainError):
     code = "CAMPAIGN_NOT_FOUND"
 
