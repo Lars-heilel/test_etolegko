@@ -1,0 +1,28 @@
+# --- backend ---
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# --- frontend ---
+node_modules/
+dist/
+.vite/
+*.local
+
+# --- env / secrets ---
+.env
+.env.*
+!.env.example
+
+# --- tooling ---
+.DS_Store
+.idea/
+.vscode/
+coverage/
+*.log
