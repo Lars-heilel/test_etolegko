@@ -9,7 +9,7 @@ Base: `c976d9b`. Implemented Task 7 only.
 - Returns the local snapshot without refreshing or writing local state.
 - Gateway preserves remote settings apart from offers and existing read-only exclusions.
 - Extended existing update_offers port with backward-compatible keyword campaign_id; Save always supplies it. Gateway verifies strict integer ownership before PUT, rejecting missing/mismatched ownership.
-- Gateway failures stop subsequent streams and return sanitized HTTP 502 with confirmed_stream_ids and failed_stream_id. Messages explicitly allow an unknown failed-stream outcome; no rollback claim or automatic retry.
+- Gateway failures stop subsequent streams and return sanitized HTTP 502 with confirmed_stream_ids and failed_stream_id. Messages explicitly allow an unknown failed-stream outcome; no rollback claim. The use case adds no retry loop; PUT inherits the client's bounded retries for network errors and 5xx responses (creation POSTs disable retries).
 - Reviewed diff and layer boundaries: no framework/infrastructure imports in the use case; no schema changes. Tests use real HTTP handler, use case, gateway and SQLite repository with only external HTTP mocked.
 
 ## Evidence

@@ -1,7 +1,7 @@
 from collections.abc import AsyncIterator
 from typing import Annotated
 
-from fastapi import Depends, HTTPException
+from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.keitaro.repositories import CampaignOfferRepository
@@ -9,7 +9,6 @@ from app.infrastructure.config import Settings, get_settings
 from app.infrastructure.database import get_session
 from app.infrastructure.keitaro.campaigns import KeitaroCampaignGateway
 from app.infrastructure.keitaro.client import KeitaroClient
-from app.infrastructure.keitaro.errors import KeitaroError
 from app.infrastructure.keitaro.flows import KeitaroFlowGateway
 from app.infrastructure.persistence.campaign_offer_repository import (
     SqlAlchemyCampaignOfferRepository,
@@ -30,15 +29,8 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 
 async def get_keitaro_client(settings: SettingsDep) -> AsyncIterator[KeitaroClient]:
-    try:
-        async with KeitaroClient(settings.keitaro_base_url, settings.keitaro_api_key) as client:
-            yield client
-    except KeitaroError:
-        # Upstream response bodies may echo credentials or other private data.
-        raise HTTPException(
-            status_code=502,
-            detail={"code": "KEITARO_UNAVAILABLE", "message": "Could not load data from Keitaro"},
-        ) from None
+    async with KeitaroClient(settings.keitaro_base_url, settings.keitaro_api_key) as client:
+        yield client
 
 
 ClientDep = Annotated[KeitaroClient, Depends(get_keitaro_client)]

@@ -89,7 +89,7 @@ async def test_all_creator_fields_required(client: AsyncClient, field: str) -> N
     payload = {key: value for key, value in PAYLOAD.items() if key != field}
     response = await client.post("/api/v1/campaigns", json=payload)
     assert response.status_code == 422
-    assert response.json()["detail"]["code"] == "VALIDATION_ERROR"
+    assert response.json()["code"] == "VALIDATION_ERROR"
     assert not respx.calls
 
 
@@ -119,7 +119,7 @@ async def test_invalid_creator_input_never_writes(
 ) -> None:
     response = await client.post("/api/v1/campaigns", json={**PAYLOAD, field: value})
     assert response.status_code == 422
-    assert response.json()["detail"]["code"] == "VALIDATION_ERROR"
+    assert response.json()["code"] == "VALIDATION_ERROR"
     assert not respx.calls
 
 
@@ -151,7 +151,7 @@ async def test_creation_failure_is_truthful_and_never_retried(
         )
     response = await client.post("/api/v1/campaigns", json=PAYLOAD)
     assert response.status_code == 502
-    detail = response.json()["detail"]
+    detail = response.json()
     assert detail["code"] == "KEITARO_UNAVAILABLE"
     assert detail["campaign_id"] == (None if stage == "campaign" else 42)
     assert detail["failed_step"] == stage
@@ -170,5 +170,5 @@ async def test_malformed_creation_response_reports_unknown_outcome(
     respx.post(f"{BASE}/campaigns").respond(200, json=created)
     response = await client.post("/api/v1/campaigns", json=PAYLOAD)
     assert response.status_code == 502
-    assert response.json()["detail"]["campaign_id"] is None
+    assert response.json()["campaign_id"] is None
     assert len(respx.calls) == 1

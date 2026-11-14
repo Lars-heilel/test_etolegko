@@ -92,7 +92,7 @@ async def test_save_rejects_unverified_remote_ownership(
     respx.get(f"{BASE}/streams/10").respond(200, json={"campaign_id": owner})
     response = await client.put(URL)
     assert response.status_code == 502
-    assert response.json()["detail"]["confirmed_stream_ids"] == []
+    assert response.json()["confirmed_stream_ids"] == []
     assert all(call.request.method == "GET" for call in respx.calls)
     assert await rows(session_factory) == [(1, 100, "active", False)]
 
@@ -128,7 +128,7 @@ async def test_partial_save_failure_is_truthful(
         failed.respond(500, json={"message": "private-secret"})
     response = await client.put(URL)
     assert response.status_code == 502
-    detail = response.json()["detail"]
+    detail = response.json()
     assert detail["confirmed_stream_ids"] == [10]
     assert detail["failed_stream_id"] == 20
     assert "Check Keitaro" in detail["message"]

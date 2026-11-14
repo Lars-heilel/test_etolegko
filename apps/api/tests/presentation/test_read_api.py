@@ -2,11 +2,17 @@ from collections.abc import Iterator
 
 import pytest
 import respx
-from httpx import AsyncClient
+from httpx import AsyncClient, ReadTimeout
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.domain.keitaro.exceptions import DomainError
+from app.domain.keitaro.snapshots import KeitaroFlowSnapshot
+from app.domain.keitaro.value_objects.identifiers import CampaignId
 from app.infrastructure.config import get_settings
+from app.infrastructure.persistence.campaign_offer_repository import (
+    SqlAlchemyCampaignOfferRepository,
+)
 from app.infrastructure.persistence.models import CampaignOfferModel
 
 BASE = "https://tracker.example.com/admin_api/v1"
@@ -179,7 +185,7 @@ async def test_failed_refresh_keeps_cache_and_sanitizes_error(
     respx.get(f"{BASE}/offers").respond(403, json={"message": "test-only-key private details"})
     response = await client.get("/api/v1/campaigns/4/offers")
     assert response.status_code == 502
-    assert response.json()["detail"]["code"] == "KEITARO_UNAVAILABLE"
+    assert response.json()["code"] == "KEITARO_UNAVAILABLE"
     assert "test-only-key" not in response.text
     assert "private details" not in response.text
     async with session_factory() as session:
@@ -193,3 +199,63 @@ async def test_invalid_campaign_id(client: AsyncClient, campaign_id: str) -> Non
     response = await client.get(f"/api/v1/campaigns/{campaign_id}/offers")
     assert response.status_code == 422
     assert not respx.calls
+
+
+@respx.mock
+async def test_upstream_timeout_returns_sanitized_503(client: AsyncClient) -> None:
+    respx.get(f"{BASE}/offers").mock(side_effect=ReadTimeout("private test-only-key"))
+    response = await client.get("/api/v1/offers")
+    assert response.status_code == 503
+    assert response.json()["code"] == "KEITARO_UNAVAILABLE"
+    assert "private" not in response.text
+    assert "test-only-key" not in response.text
+    assert response.headers["x-request-id"]
+
+
+@respx.mock
+async def test_refresh_failure_after_flush_rolls_back_cache(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async with session_factory() as session, session.begin():
+        session.add(
+            CampaignOfferModel(
+                campaign_id=4,
+                stream_id=11,
+                stream_name="Local",
+                offer_id=7,
+                offer_name="Local",
+                share=70,
+                state="active",
+                locked=True,
+            )
+        )
+    respx.get(f"{BASE}/campaigns/4/streams").respond(
+        200, json=[{"id": 12, "name": "New", "offers": [{"offer_id": 8, "share": 100}]}]
+    )
+    respx.get(f"{BASE}/offers").respond(200, json=[{"id": 8, "name": "New"}])
+    original_sync = SqlAlchemyCampaignOfferRepository.sync_from_keitaro
+
+    async def failing_sync(
+        self: SqlAlchemyCampaignOfferRepository,
+        campaign_id: CampaignId,
+        flows: list[KeitaroFlowSnapshot],
+        seen_stream_ids: list[int],
+        offer_names: dict[int, str],
+    ) -> None:
+        await original_sync(self, campaign_id, flows, seen_stream_ids, offer_names)
+        raise DomainError("Injected failure after cache flush")
+
+    monkeypatch.setattr(SqlAlchemyCampaignOfferRepository, "sync_from_keitaro", failing_sync)
+    response = await client.get("/api/v1/campaigns/4/offers")
+    assert response.status_code == 422
+    async with session_factory() as session:
+        row = (await session.scalars(select(CampaignOfferModel))).one()
+        assert (row.stream_id, row.offer_id, row.share, row.locked, row.stream_name) == (
+            11,
+            7,
+            70,
+            True,
+            "Local",
+        )

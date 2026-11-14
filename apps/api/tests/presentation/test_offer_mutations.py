@@ -172,7 +172,6 @@ async def test_invalid_mutation_payload(
     response = await client.request(method, URL + suffix, json=payload)
     assert response.status_code == 422
     assert not respx.calls
-    assert not respx.calls
 
 
 @pytest.mark.parametrize(
@@ -207,7 +206,7 @@ async def test_failed_catalog_lookup_does_not_mutate(
     await seed(session_factory)
     respx.get(f"{BASE}/offers/2").respond(500, json={"message": "private"})
     response = await client.post(URL, json={"offer_id": 2})
-    assert response.status_code == 502
+    assert response.status_code == 503
     assert "private" not in response.text
     assert await rows(session_factory) == [(1, 100, "active", False)]
 

@@ -5,7 +5,7 @@
 1. создание кампании с двумя потоками (гео-редирект на Google + оффер);
 2. редактор офферов существующей кампании.
 
-> **Текущий статус:** инициализировано окружение монорепозитория. Бизнес-логика, интеграция с Keitaro API и миграции ещё не добавлены. Требования — в [`specs/001-keitaro-campaign-manager/spec.md`](specs/001-keitaro-campaign-manager/spec.md).
+> **Текущий статус:** backend реализует создание кампаний и локальный редактор офферов с сохранением в Keitaro. Frontend пока содержит страницы-заглушки. Требования — в [`specs/001-keitaro-campaign-manager/spec.md`](specs/001-keitaro-campaign-manager/spec.md).
 
 ## Структура
 
@@ -49,7 +49,7 @@ cp .env.example .env
 
 make install      # uv sync + pnpm install
 make db-up        # PostgreSQL в Docker
-make migrate      # alembic upgrade head (пока без ревизий)
+make migrate      # alembic upgrade head
 make dev          # API :8000 и web :5173 в одном терминале
 ```
 
@@ -97,12 +97,65 @@ Frontend читает `VITE_API_BASE_URL` из `apps/web/.env` (см. `apps/web/
 - Монорепо `apps/api` + `apps/web`, общий `.env.example`, Makefile, compose с PostgreSQL.
 - FastAPI-приложение с healthcheck, CORS, настройками, async SQLAlchemy-сессией и Alembic.
 - React-приложение: Vite, React Router, TanStack Query, shadcn/ui, FSD-слои `app/pages/shared`, страницы-заглушки.
-- Тесты-заглушки: `pytest` для healthcheck и `vitest` для `cn`.
+- Backend: клиент Keitaro, use cases, модели и миграция локального кеша офферов, тесты API и доменной логики; frontend: `vitest` для `cn`.
 - Линтеры: `ruff`, `mypy`, `oxlint`, `steiger`.
 
 ## Что дальше
 
-- Клиент Keitaro API и use cases создания/редактирования кампаний.
-- SQLAlchemy-модели и первые миграции.
 - Реальные формы, поиск офферов, редактор потоков и весов.
 - Генерация TS-клиента из OpenAPI.
+
+## API
+
+- `GET /api/v1/health` — состояние API.
+- `GET /api/v1/campaigns` — все кампании Keitaro, пагинация внутри backend.
+- `GET /api/v1/campaigns/form-options` — домены, группы кампаний, источники трафика.
+- `GET /api/v1/offers` — каталог офферов; `?search=` фильтрует имена локально.
+- `POST /api/v1/campaigns` — создание кампании с Google- и offer-потоками.
+- `GET /api/v1/campaigns/{id}/offers` — обновление локального кеша потоков и офферов из Keitaro.
+- `POST /api/v1/campaigns/{id}/flows/{stream_id}/offers` — локальное добавление оффера.
+- `DELETE /api/v1/campaigns/{id}/flows/{stream_id}/offers/{offer_id}` — локальное soft-delete.
+- `POST /api/v1/campaigns/{id}/flows/{stream_id}/offers/{offer_id}/restore` — восстановление.
+- `PATCH /api/v1/campaigns/{id}/flows/{stream_id}/offers/{offer_id}/lock` — фиксация/разблокировка доли.
+- `PUT /api/v1/campaigns/{id}/offers` — сохранение активных офферов и долей в Keitaro.
+
+Редактор работает с загруженными потоками. Локальные изменения сохраняются в БД,
+но отправляются в Keitaro только через PUT. Refresh сохраняет доли активных locked-офферов,
+помечает исчезнувшие офферы deleted и убирает пустые/исчезнувшие потоки.
+При ошибке локальная транзакция откатывается; удалённые записи не откатываются.
+Создание и сохранение нескольких потоков не атомарны. POST создания не повторяется
+автоматически; GET и PUT наследуют ограниченные retry клиента на сетевые ошибки и 5xx.
+После частичной ошибки проверьте Keitaro перед повтором: результат неудачного запроса
+может быть неизвестен.
+
+### Ошибки и request ID
+
+Ошибки приложения имеют верхнеуровневые `code` и `message` (без обёртки `detail`):
+
+| HTTP | code | Причина |
+|---|---|---|
+| 422 | `VALIDATION_ERROR` | Неверные поля, страна или доли; ошибки полей содержат `errors` |
+| 404 | `CAMPAIGN_NOT_FOUND` | Не найдена кампания, загруженный поток или оффер |
+| 409 | `OFFER_ALREADY_EXISTS` | Оффер уже присутствует, включая deleted |
+| 502 | `KEITARO_UNAVAILABLE` | Ошибка ответа Keitaro или частичного создания/сохранения |
+| 503 | `KEITARO_UNAVAILABLE` | Недоступность/таймаут, исчерпанные retry на 5xx или отсутствующая конфигурация Keitaro |
+
+Частичное создание дополнительно возвращает `campaign_id` (может быть null),
+`failed_step`, `confirmed_flows`; сохранение — `failed_stream_id`, `confirmed_stream_ids`.
+Сообщения upstream, ключи и исходные значения полей не включаются в ошибки.
+Стандартные HTTP-ошибки маршрутизации FastAPI сохраняют свой формат.
+
+Ответы успешных запросов и обработанных ошибок содержат `X-Request-ID`, доступный через CORS.
+Один входной ID из 1–128 ASCII-символов `A-Z a-z 0-9 . _ -` сохраняется;
+отсутствующий, повторяющийся или некорректный ID заменяется случайным UUID hex.
+ID доступен обработчикам как `request.state.request_id` и служит корреляции, не авторизации.
+
+Backend-проверки без обращений к живому Keitaro:
+
+```bash
+cd apps/api
+uv run pytest -q
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy app
+```

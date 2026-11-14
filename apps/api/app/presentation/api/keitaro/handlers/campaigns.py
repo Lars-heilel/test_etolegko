@@ -1,12 +1,7 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Path, status
+from fastapi import APIRouter, Depends, Path, status
 
-from app.domain.keitaro.exceptions import (
-    CampaignCreationError,
-    CampaignOffersSaveError,
-    DomainError,
-)
 from app.domain.keitaro.value_objects.identifiers import CampaignId
 from app.presentation.api.keitaro.dependencies import (
     get_add_offer_usecase,
@@ -47,18 +42,7 @@ async def save_offers(
     campaign_id: Annotated[int, Path(gt=0)],
     usecase: Annotated[SaveCampaignOffersUseCase, Depends(get_save_offers_usecase)],
 ) -> OfferRotationResponse:
-    try:
-        flows = await usecase.execute(campaign_id)
-    except CampaignOffersSaveError as error:
-        raise HTTPException(
-            status_code=502,
-            detail={
-                "code": error.code,
-                "message": error.message,
-                "failed_stream_id": error.failed_stream_id,
-                "confirmed_stream_ids": error.confirmed_stream_ids,
-            },
-        ) from None
+    flows = await usecase.execute(campaign_id)
     return to_rotation_response(campaign_id, flows)
 
 
@@ -67,30 +51,14 @@ async def create_campaign(
     payload: CreateCampaignRequest,
     usecase: Annotated[CreateCampaignUseCase, Depends(get_create_campaign_usecase)],
 ) -> CampaignSummaryResponse:
-    try:
-        created = await usecase.execute(
-            payload.name,
-            payload.country_code,
-            payload.offer_id,
-            payload.domain_id,
-            payload.group_id,
-            payload.traffic_source_id,
-        )
-    except CampaignCreationError as error:
-        raise HTTPException(
-            status_code=502,
-            detail={
-                "code": error.code,
-                "message": error.message,
-                "campaign_id": error.campaign_id,
-                "failed_step": error.failed_step,
-                "confirmed_flows": error.confirmed_flows,
-            },
-        ) from None
-    except DomainError as error:
-        raise HTTPException(
-            status_code=422, detail={"code": error.code, "message": error.message}
-        ) from None
+    created = await usecase.execute(
+        payload.name,
+        payload.country_code,
+        payload.offer_id,
+        payload.domain_id,
+        payload.group_id,
+        payload.traffic_source_id,
+    )
     return CampaignSummaryResponse(
         id=created.id, name=created.name, state=created.state, alias=created.alias
     )
